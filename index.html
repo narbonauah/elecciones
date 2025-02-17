@@ -1,0 +1,298 @@
+
+<!DOCTYPE HTML>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Simulador electoral. Cálculo de resultados según el sistema D'Hondt</title>
+<meta name="description" content="Simulador electoral. Cálculo de resultados según el sistema D'Hondt" /> 
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=0">
+<link href="/util/hondt/hondt.css" rel="stylesheet" type="text/css" />
+<script src="/util/hondt/jquery.js"></script>
+<script src="/util/hondt/calculadora.js?190701"></script>
+<script src="/util/hondt/icck.js"></script>
+<script>
+var arrows = [
+	37,38,39,40, // arrows
+	33,34,35,36, // page up/down, end, home
+	144, // num lock
+	9 // tab
+];
+
+var allowed = [	
+	48,49,50,51,52,53,54,55,56,57, // num
+	96,97,98,99,100,101,102,103,104,105, // numpad
+	8, //jQuery.ui.keyCode.BACKSPACE
+	46, //jQuery.ui.keyCode.DELETE
+	13, //jQuery.ui.keyCode.ENTER
+	27, //jQuery.ui.keyCode.ESCAPE
+	107, 109, // add and substract
+	38, 40, // up and down
+	187 // signe +/igual (iOS)
+	//51, 56 // # i * (iOS, incl. numeros)
+];
+	
+var updownkeys = [	
+	107, 109, 
+	38, 40, 
+	187
+];
+
+function dibRes() {
+	if(numRep&&bons.length) {
+	
+		str="";
+	
+		//Mostrar resultats
+		jQuery("#sortida").html("");
+		str+="<ul>";
+		for(i=0;i<cdds.length;i++) {
+			switch(cdds[ordrebo[i]].elegits) {
+				case -1: rep="<span class=\"nomin nowrap\">Descartada (no votos mínimos)</span>"; break;
+				case 0: rep="Ninguno"; break;
+				default: rep='<span class="numRes">'+cdds[ordrebo[i]].elegits+'</span>'; break;
+			}
+			pct = (100*cdds[ordrebo[i]].vots/totalVots).toFixed(2);
+			str+='<li><p><strong class="sig'+ordrebo[i]+'">'+cdds[ordrebo[i]].sigla+'</strong> <span style="color:#666; font-size:18px;">('+pct+'%):</span> '+rep+'</p></li>\n';
+		}
+		str+="</ul>";
+		str+="Han votado <strong>"+(totalVots+nu)+"</strong> personas";
+		cens=parseInt(jQuery("#cens").val());
+		pct = (100-((totalVots+nu)*100/cens)).toFixed(2);
+		if (cens) str+=" de un censo de <strong>"+cens+"</strong>  (<strong>"+pct+"%</strong> de abstención)";
+		str+=".";
+		
+		if (cdds.length>1) {
+			str+='<p>La siguiente candidatura en obtener representación sería  <strong class="sig'+seguentCand+'">'+cdds[seguentCand].sigla+'</strong>';
+			str+='  en lugar de   <strong class="sig'+ultimCand+'">'+cdds[ultimCand].sigla+'</strong>'
+			if(votsMes>0) str+='  por  <strong>'+votsMes+'</strong> votos';
+			str+=".</p>";
+		}
+		
+		jQuery("#sortida").html(str);
+		
+	} else {
+		jQuery("#sortida").html("No hay resultados para estos valores.");
+	}
+
+}
+
+function dibSave(o) {
+	res=o.split("|");
+	if(!parseInt(res[0])) {
+		alert(res[1]);
+		jQuery('#btSave').removeClass('disSave');
+		jQuery('#btSave').html('Guardar');
+	} else {
+		jQuery('#guardar').html('Puedes acceder a los datos guardados en la dirección:<br /><a href="'+res[1]+'" class="resUrl" target="_blank">'+res[1].replace('https://','')+'</a>');
+	}
+
+}
+
+function dibCands() {
+	var str="";
+	for(i=0;i<=cdds.length;i++) {
+		if (i==cdds.length) { 
+			sigla="";
+			vots=0;
+		} else {
+			sigla=cdds[i].sigla;
+			vots=cdds[i].vots;
+		}
+		if (i!=cdds.length) { afCand=" fullCand"; } else { afCand=" voidCand"; }
+		str+='<div id="cand'+i+'" class="fCand'+afCand+'">\n';
+		str+='	<div class="fgrp fgrps"><label for="sigla'+i+'">Partido</label>\n';
+		str+='	<input class="sigla" maxlength="15" type="text" id="sigla'+i+'" name="sigla'+i+'" value="'+sigla+'" onkeyup="updateSigla('+i+',this.value);" /></div>\n';
+		str+='	<div class="fgrp fgrpv"><label for="vots'+i+'">Votos</label>\n';
+		str+='	<input class="vots" type="tel" id="vots'+i+'" data-id="'+i+'" onmouseup="return false;" name="vots'+i+'" value="'+vots+'" /></div>\n';
+		str+='	<div class="bgrp">';
+		if (i!=cdds.length) { 
+			str+='	<a href="#" class="boto neg" id="elim'+i+'" name="elim'+i+'" value="" onclick="elimCand('+i+'); return false;"><span class="hd-m">Eliminar</span><span class="hd-d">X</span></a>\n';
+		} else {
+			str+='	<a href="#" class="addCand boto pos" onclick="addCand('+i+'); return false;">Añadir</a>\n';
+		}
+		str+='	</div>\n';
+		str+='</div>\n';
+	}
+	jQuery("#cands").html(str);
+	jQuery('input.vots').unbind('keyup keydown focus')
+		.focus(function () {
+			if(jQuery(this).val()==0) 
+				jQuery(this).val('');
+		})
+		.keydown(function (e) {
+			var code = (e.keyCode || e.which);
+			//document.title = code;
+			//console.log(code); 
+			if(allowed.indexOf(code)==-1 && arrows.indexOf(code)==-1 || updownkeys.indexOf(code)>-1) 
+				e.preventDefault();
+				
+		})
+		.keyup(function (e) {
+			var code = (e.keyCode || e.which);
+			var i = jQuery(this).attr('data-id');
+				
+			if(allowed.indexOf(code)!=-1) { // numeric or allowed
+				var num=jQuery(this).val().replace(/\.|,| |\-|\t|a-z/gi, "");
+				num=(parseInt(num)!=num-0)? 0 : parseInt(num);
+				
+				if (updownkeys.indexOf(code)>-1) {
+					e.preventDefault();
+					switch (code) {
+						case 107: case 38: case 187: num = num+1; break;
+						case 109: case 40: /*case 51: case 56:*/ num = num-1; break;
+					}
+					jQuery(this).val(num);
+				} 
+				updateVots(i, num); 
+				
+			} else if(arrows.indexOf(code)!=-1) { // arrows
+				return;
+			} else {
+				e.preventDefault();
+			}
+		});
+}
+var varurl='elecciones';
+
+jQuery(function() {
+	jQuery('input.innum')
+		.focus(function () {
+			if(jQuery(this).val()==0) 
+				jQuery(this).val('');
+		})
+		.keydown(function (e) {
+			var code = (e.keyCode || e.which);
+			console.log(code);
+			if(allowed.indexOf(code)==-1 && arrows.indexOf(code)==-1 || code==107 || code==109) 
+				e.preventDefault();
+		})
+		.keyup(function (e) {
+			var code = (e.keyCode || e.which);
+				
+			if(allowed.indexOf(code)!=-1) { // numeric or allowed, active
+				if (code==107||code==109) {
+					e.preventDefault();
+					var mv = 108-code;
+					jQuery(this).val(parseInt(jQuery(this).val())+mv);
+				} 
+				calcular();
+			} else if(arrows.indexOf(code)!=-1) { // navigation / arrows
+				return;
+			} else {
+				e.preventDefault();
+			}
+		});
+});
+
+
+var icck = iconCookies({lang:'es', policyLink: '/util/'+varurl+'/cookies'}).init();
+
+</script>
+<script>
+(adsbygoogle = window.adsbygoogle || []).push({
+	google_ad_client: "ca-pub-9862092477077116",
+	enable_page_level_ads: true
+});
+</script>
+</head>
+
+<body>
+	<div id="wrapper">
+	
+					<div id="AdSense_V">
+                <!-- Calculadora electoral -->
+                <ins class="adsbygoogle"
+                     style="display:inline-block;width:160px;height:600px"
+                     data-ad-client="ca-pub-9862092477077116"
+                     data-ad-slot="6916078487"></ins>
+                <script>
+                (adsbygoogle = window.adsbygoogle || []).push({});
+                </script>
+			</div>
+		 
+		<div id="container">
+			<ul id="langs">
+				<li><a href="/util/eleccions/">Català</a></li>								<li><a href="/util/elections/">English</a></li>			</ul>
+            <h1>Simulador electoral. Cálculo de resultados según el sistema D'Hondt</h1>
+			<form name="hondt" id="hondt" action="#">
+				
+								<h3>Calculadora programada según <a href="https://es.wikipedia.org/wiki/Sistema_D%27Hondt" target="_blank">el método de D'Hondt</a> por <a href="https://isaacroca.com" target="_blank">Isaac Roca</a> para <a href="https://icon.cat" target="_blank">ICON</a>.</h3>
+								
+                                
+					                    <fb:like href="https://icon.cat/util/elecciones" send="true" width="570" show_faces="true" font="arial"></fb:like>
+                    <h4>Entrada de datos</h4>
+                    <div id="entrada">
+                                                <p>
+                            Se han de elegir                             <input maxlength="3" value="" id="representants" class="innum" name="representants" type="tel" size="5"  />
+                         representantes.
+                        </p>
+                        
+                        <h5>Campos opcionales</h5>
+                        <div id="opcionals">
+                            <p>
+                              Para obtener representación se han de tener como mínimo un                               <input maxlength="2" class="innum" id="minim" style="width:30px; text-align:right;" name="minim" type="tel" size="5"  value="" />
+                                % de los votos.<br />
+                            </p>
+                            <p>
+                             El <strong>censo electoral</strong> es de                               <input id="cens" class="innum" value="" name="cens" type="tel" style="width:100px;" size="10"  /> 
+                              personas. <span class="nowrap">[calcular la participación]</span>                            </p>
+                            <p>
+                              <span class="nowrap"><strong>En blanco</strong>:                               <input name="blanc" value="" type="tel" class="vots2 innum" id="blanc" size="5" /> votos.</span>
+                              &nbsp;
+                               <span class="nowrap"><strong>Nulos</strong>:                               <input name="nul" value="" type="tel" class="vots2 innum" id="nul" size="5" /> votos.</span>
+                                                         </p>
+                        </div>
+                        
+                        <h5>Candidaturas </h5>
+                        <div id="cands">
+                            <script>
+                            dibCands();
+                            </script>
+                        </div>
+                        
+                    </div>
+                    <h4>Resultados</h4>
+                    <div id="sortida">
+                    </div>
+                    
+                        
+                    <h4>Guardar esta simulación</h4>
+                  <div id="guardar">
+                        T&iacute;tulo:<br />
+                          <input maxlength="200" id="titol" name="titol" type="text" size="60" />
+                        <a id="btSave" href="#" class="boto sav" onclick="guardar(); return false;">Guardar</a>
+                  </div>
+                                			</form>
+			<div id="peu">
+				Diseño y programaci&oacute;n realizados por <a href="https://isaacroca.com" target="_blank">Isaac Roca</a> para <a href="https://icon.cat" target="_blank">ICON</a>. <a href="/util/elecciones/cookies">Política de cookies</a>.<br />
+								<p>
+				<img src="/util/hondt/load.gif" style="display:none;" />
+				<a href="https://icon.cat" target="_blank"><img src="https://siknus.cat/wp-content/themes/siknus/images/icon.gif" class="cc" border="0" alt="icon.cat" title="Powered by icon.cat" /></a>
+				</p>
+			 </div>
+                         		</div>
+	</div>
+<div id="fb-root"></div>
+<script>
+	icck.agreed(function () {
+		  (function() {
+			var e = document.createElement('script'); e.async = true;
+			e.src = document.location.protocol +
+			  '//connect.facebook.net/es_ES/all.js#xfbml=1';
+			document.getElementById('fb-root').appendChild(e);
+		  }());
+	});
+</script>
+<script>
+	icck.agreed(function () {
+		  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+		  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+		  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+		  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+		  ga('create', 'UA-2066752-1', 'auto');
+		  ga('require', 'displayfeatures');
+		  ga('send', 'pageview');
+  	});
+</script>
+</body>
+</html>
