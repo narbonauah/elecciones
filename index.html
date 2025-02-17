@@ -100,7 +100,7 @@ function dibCands() {
 		}
 		if (i!=cdds.length) { afCand=" fullCand"; } else { afCand=" voidCand"; }
 		str+='<div id="cand'+i+'" class="fCand'+afCand+'">\n';
-		str+='	<div class="fgrp fgrps"><label for="sigla'+i+'">Partido</label>\n';
+		str+='	<div class="fgrp fgrps"><label for="sigla'+i+'">Sindicato</label>\n';
 		str+='	<input class="sigla" maxlength="15" type="text" id="sigla'+i+'" name="sigla'+i+'" value="'+sigla+'" onkeyup="updateSigla('+i+',this.value);" /></div>\n';
 		str+='	<div class="fgrp fgrpv"><label for="vots'+i+'">Votos</label>\n';
 		str+='	<input class="vots" type="tel" id="vots'+i+'" data-id="'+i+'" onmouseup="return false;" name="vots'+i+'" value="'+vots+'" /></div>\n';
